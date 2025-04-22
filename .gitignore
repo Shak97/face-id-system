@@ -1,0 +1,83 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints
+
+# Virtual environment
+venv/
+env/
+.venv/
+
+# VSCode settings
+.vscode/
+
+# PyCharm settings
+.idea/
+
+# Environment variables
+.env
+.env.*
+
+# Logs
+*.log
+
+# Data files
+*.csv
+*.tsv
+*.data
+*.dat
+*.h5
+*.hdf5
+*.pkl
+*.joblib
+*.npy
+*.npz
+
+# Model weights and checkpoints
+*.ckpt
+*.pt
+*.pth
+*.tflite
+*.pb
+*.onnx
+*.sav
+
+# TensorBoard logs
+runs/
+logs/
+
+# Experiment results
+output/
+results/
+checkpoints/
+
+# Images & videos
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.mp4
+*.avi
+
+# System-specific files
+.DS_Store
+Thumbs.db
+
+# Compiled Cython files
+*.c
+*.so
+
+# Notebook conversion outputs
+*.html
+*.pdf
+
+# Docker
+docker-compose.override.yml
+
+# Build artifacts
+build/
+dist/
+*.egg-info/
