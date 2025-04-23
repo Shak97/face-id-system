@@ -15,8 +15,6 @@ This project is a **threaded real-time face recognition pipeline** built with Py
 
 ## 🗂️ Project Structure
 
-## 🗂️ Project Structure
-
 ```
 project/
 │
