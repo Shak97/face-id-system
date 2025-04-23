@@ -4,12 +4,12 @@ import numpy as np
 import torch
 from torchvision import transforms
 
-from inception_resnet_SE.cbam import CBAM
+from .inception_resnet_SE.cbam import CBAMResNet
 
 class Recognizer:
     def __init__(self, device):
         
-        self.model = CBAM(50, feature_dim = 512, mode = 'ir_se')
+        self.model = CBAMResNet(50, feature_dim = 512, mode = 'ir_se')
        
         state_dict = torch.load(r'recognizers/weights/Iter_243000_net.ckpt', map_location=device)['net_state_dict']
         self.model.load_state_dict(state_dict, strict=True)

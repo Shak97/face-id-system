@@ -1,4 +1,4 @@
-from yolo_detector.face_detector import YoloDetector
+from .yolo_detector.face_detector import YoloDetector
 
 class Detector:
     def __init__(self, device, target_size = 720, min_face = 90):
