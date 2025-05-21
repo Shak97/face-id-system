@@ -58,6 +58,8 @@ checkpoints/
 
 # Images & videos
 *.jpg
+*.JPG
+*.bmp
 *.jpeg
 *.png
 *.gif
