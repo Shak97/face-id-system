@@ -9,6 +9,7 @@ import copy
 import scipy
 import pathlib
 import warnings
+import time
 
 from math import sqrt
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname("__file__"), '..')))
@@ -85,37 +86,82 @@ class YoloDetector: # 안면인식 Yolo 모델 클래스, 로그인에 사용
         pp_imgs /= 255.0  # 0 - 255 to 0.0 - 1.0
         return pp_imgs
         
+    # def _postprocess(self, imgs, origimgs, pred, conf_thres, iou_thres):
+    #     """
+    #         Postprocessing of raw pytorch model output.
+    #         Returns:
+    #             bboxes: list of arrays with 4 coordinates of bounding boxes with format x1,y1,x2,y2.
+    #             points: list of arrays with coordinates of 5 facial keypoints (eyes, nose, lips corners).
+    #     """
+    #     bboxes = [[] for i in range(len(origimgs))]
+    #     landmarks = [[] for i in range(len(origimgs))]
+        
+    #     pred = non_max_suppression_face(pred, conf_thres, iou_thres)
+        
+    #     for i in range(len(origimgs)):
+    #         img_shape = origimgs[i].shape
+    #         h,w = img_shape[:2]
+    #         gn = torch.tensor(img_shape)[[1, 0, 1, 0]]  # normalization gain whwh
+    #         gn_lks = torch.tensor(img_shape)[[1, 0, 1, 0, 1, 0, 1, 0, 1, 0]]  # normalization gain landmarks
+    #         det = pred[i].cpu()
+    #         scaled_bboxes = scale_coords(imgs[i].shape[1:], det[:, :4], img_shape).round()
+    #         scaled_cords = scale_coords_landmarks(imgs[i].shape[1:], det[:, 5:15], img_shape).round()
+
+    #         for j in range(det.size()[0]):
+    #             box = (det[j, :4].view(1, 4) / gn).view(-1).tolist()
+    #             box = list(map(int,[box[0]*w,box[1]*h,box[2]*w,box[3]*h]))
+    #             if box[3] - box[1] < self.min_face:
+    #                 continue
+    #             lm = (det[j, 5:15].view(1, 10) / gn_lks).view(-1).tolist()
+    #             lm = list(map(int,[i*w if j%2==0 else i*h for j,i in enumerate(lm)]))
+    #             lm = [lm[i:i+2] for i in range(0,len(lm),2)]
+    #             bboxes[i].append(box)
+    #             landmarks[i].append(lm)
+    #     return bboxes, landmarks
+    
     def _postprocess(self, imgs, origimgs, pred, conf_thres, iou_thres):
         """
-            Postprocessing of raw pytorch model output.
-            Returns:
-                bboxes: list of arrays with 4 coordinates of bounding boxes with format x1,y1,x2,y2.
-                points: list of arrays with coordinates of 5 facial keypoints (eyes, nose, lips corners).
+        GPU-accelerated postprocessing of model output.
+        Returns:
+            bboxes: list of arrays with 4 coordinates of bounding boxes with format x1,y1,x2,y2.
+            points: list of arrays with coordinates of 5 facial keypoints (eyes, nose, lips corners).
         """
-        bboxes = [[] for i in range(len(origimgs))]
-        landmarks = [[] for i in range(len(origimgs))]
-        
-        pred = non_max_suppression_face(pred, conf_thres, iou_thres)
-        
-        for i in range(len(origimgs)):
-            img_shape = origimgs[i].shape
-            h,w = img_shape[:2]
-            gn = torch.tensor(img_shape)[[1, 0, 1, 0]]  # normalization gain whwh
-            gn_lks = torch.tensor(img_shape)[[1, 0, 1, 0, 1, 0, 1, 0, 1, 0]]  # normalization gain landmarks
-            det = pred[i].cpu()
-            scaled_bboxes = scale_coords(imgs[i].shape[1:], det[:, :4], img_shape).round()
-            scaled_cords = scale_coords_landmarks(imgs[i].shape[1:], det[:, 5:15], img_shape).round()
+        device = pred.device
+        batch_size = len(origimgs)
+        bboxes = [[] for _ in range(batch_size)]
+        landmarks = [[] for _ in range(batch_size)]
 
-            for j in range(det.size()[0]):
-                box = (det[j, :4].view(1, 4) / gn).view(-1).tolist()
-                box = list(map(int,[box[0]*w,box[1]*h,box[2]*w,box[3]*h]))
-                if box[3] - box[1] < self.min_face:
+        pred = non_max_suppression_face(pred, conf_thres, iou_thres)
+
+        for i in range(batch_size):
+            orig_img = origimgs[i]
+            h, w = orig_img.shape[:2]
+
+            gn = torch.tensor([w, h, w, h], dtype=torch.float32, device=device)
+            gn_lks = torch.tensor([w, h] * 5, dtype=torch.float32, device=device)
+
+            det = pred[i]
+            if det is None or det.size(0) == 0:
+                continue
+
+            # Stay on GPU during scaling
+            scaled_bboxes = scale_coords(imgs[i].shape[1:], det[:, :4], orig_img.shape).round()
+            scaled_landmarks = scale_coords_landmarks(imgs[i].shape[1:], det[:, 5:15], orig_img.shape).round()
+
+            # Normalize and denormalize directly
+            boxes = (det[:, :4] / gn) * gn  # removes redundancy
+            boxes = boxes.round().int()
+
+            lms = (det[:, 5:15] / gn_lks) * gn_lks
+            lms = lms.round().int().view(-1, 5, 2)
+
+            for j in range(det.size(0)):
+                x1, y1, x2, y2 = boxes[j]
+                if (y2 - y1).item() < self.min_face:
                     continue
-                lm = (det[j, 5:15].view(1, 10) / gn_lks).view(-1).tolist()
-                lm = list(map(int,[i*w if j%2==0 else i*h for j,i in enumerate(lm)]))
-                lm = [lm[i:i+2] for i in range(0,len(lm),2)]
-                bboxes[i].append(box)
-                landmarks[i].append(lm)
+                bboxes[i].append([x1.item(), y1.item(), x2.item(), y2.item()])
+                landmarks[i].append(lms[j].tolist())
+
         return bboxes, landmarks
 
     def get_frontal_predict(self, box, points):
@@ -169,7 +215,10 @@ class YoloDetector: # 안면인식 Yolo 모델 클래스, 로그인에 사용
             if len(shapes) != 1:
                 one_by_one = True
                 warnings.warn(f"Can't use batch predict due to different shapes of input images. Using one by one strategy.")
+        st = time.time()
         origimgs = copy.deepcopy(images)
+        et = time.time() - st
+        # print('deepcopy time:', et)
         
         
         if one_by_one:
@@ -187,8 +236,16 @@ class YoloDetector: # 안면인식 Yolo 모델 클래스, 로그인에 사용
         else:
             images = self._preprocess(images)
             with torch.inference_mode(): # change this with torch.no_grad() for pytorch <1.8 compatibility
+                # import time
+                st = time.time()
                 pred = self.detector(images)[0]
+                et = time.time() - st
+                # print('actual detection time:', et)
+
+            st = time.time()
             bboxes, points = self._postprocess(images, origimgs, pred, conf_thres, iou_thres)
+            et = time.time() - st
+            # print('postprocess time:', et)
 
         return bboxes, points
 

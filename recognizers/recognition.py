@@ -1,6 +1,7 @@
 import os
 import cv2
 import numpy as np
+from PIL import Image
 import torch
 from torchvision import transforms
 
@@ -25,11 +26,30 @@ class Recognizer:
         ])
         
         self.device = device
+    
+    def get_embedding_batch(self, batch):
+        batch_size = len(batch)
+        data = torch.zeros((batch_size, 3, 112, 112))
+
+        for i in range(batch_size):
+            img = batch[i]
+            img = self.transform(Image.fromarray(img))
+            data[i, :, :, :] = img
+        
+        data = data.to(self.device)
+        embedding = None
+        with torch.no_grad():
+            embedding = self.model(data)
+            embedding = embedding.detach().cpu().numpy()
+        return embedding
 
     def get_embedding(self, img):
-        img = self.transform(img).to(self.device)[None, :, :, :]
+        img = self.transform(Image.fromarray(img)).to(self.device)[None, :, :, :]
         embedding = None
         with torch.no_grad():
             embedding = self.model(img)
             embedding = embedding.detach().cpu().numpy()
         return embedding
+
+
+        

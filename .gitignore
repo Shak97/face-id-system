@@ -26,6 +26,8 @@ env/
 
 # Data files
 *.csv
+*.mp4
+*.avi
 *.tsv
 *.data
 *.dat
